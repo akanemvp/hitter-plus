@@ -167,13 +167,27 @@ def main():
     batter_ids = df['batter'].dropna().unique().tolist()
     print(f"  Looking up names for {len(batter_ids)} batters...")
     id_df = playerid_reverse_lookup(batter_ids, key_type='mlbam')
-    id_df['player_name'] = id_df['name_last'].str.title() + ', ' + id_df['name_first'].str.title()
-    # Filter out pitchers (position P) who aren't two-way players
-    # Keep players with enough PAs to be real hitters (pitchers rarely have 100+ PA)
+    # Filter to hitters only (50+ PA) before name lookup
     pa_counts = df.groupby('batter')['at_bat_number'].nunique()
-    hitter_ids = pa_counts[pa_counts >= 50].index.tolist()
+    hitter_ids = set(pa_counts[pa_counts >= 50].index.tolist())
+    df = df[df['batter'].isin(hitter_ids)].reset_index(drop=True)
+
+    # Build name map: "Last, First" format preserving accents and suffixes
+    def format_name(row):
+        last = str(row.get('name_last', '') or '').strip()
+        first = str(row.get('name_first', '') or '').strip()
+        suf = str(row.get('name_suffix', '') or '').strip()
+        # title-case each part
+        last = ' '.join(w.capitalize() for w in last.split())
+        first = ' '.join(w.capitalize() for w in first.split())
+        # Handle suffix (Jr., Sr., II, III)
+        if suf and suf not in ('', 'nan'):
+            suf = suf.strip('.')
+            last = f"{last} {suf}."
+        return f"{last}, {first}" if last and first else None
+
+    id_df['player_name'] = id_df.apply(format_name, axis=1)
     id_map = dict(zip(id_df['key_mlbam'], id_df['player_name']))
-    df = df[df['batter'].isin(hitter_ids)]
     df['player_name'] = df['batter'].map(id_map)
     df = df.dropna(subset=['player_name']).reset_index(drop=True)
     print(f"  After filtering to batting events: {len(df):,} rows, {df['player_name'].nunique()} players")
