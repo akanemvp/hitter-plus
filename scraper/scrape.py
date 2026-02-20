@@ -167,37 +167,11 @@ def main():
     batter_ids = df['batter'].dropna().unique().tolist()
     print(f"  Looking up names for {len(batter_ids)} batters...")
     id_df = playerid_reverse_lookup(batter_ids, key_type='mlbam')
-    # Filter to hitters only (50+ PA) before name lookup
+    # Filter to hitters only (50+ PA) - use batter ID directly as player key
     pa_counts = df.groupby('batter')['at_bat_number'].nunique()
     hitter_ids = set(pa_counts[pa_counts >= 50].index.tolist())
     df = df[df['batter'].isin(hitter_ids)].reset_index(drop=True)
-
-    # Build name map: "Last, First" format preserving accents and suffixes
-    def format_name(row):
-        last = str(row.get('name_last', '') or '').strip()
-        first = str(row.get('name_first', '') or '').strip()
-        if not last or not first:
-            return None
-        # Title-case each word, preserving accents
-        def title_word(w):
-            # Keep known suffixes uppercase-style
-            if w.lower() in ('jr', 'sr', 'ii', 'iii', 'iv'):
-                return w.upper() if w.lower() in ('ii','iii','iv') else w.capitalize()
-            return w.capitalize()
-        last_parts = last.split()
-        first_parts = first.split()
-        last_fmt = ' '.join(title_word(w) for w in last_parts)
-        first_fmt = ' '.join(title_word(w) for w in first_parts)
-        # Add period after Jr/Sr if not present
-        last_fmt = last_fmt.replace(' Jr ', ' Jr. ').replace(' Sr ', ' Sr. ')
-        if last_fmt.endswith(' Jr') or last_fmt.endswith(' Sr'):
-            last_fmt += '.'
-        return f"{last_fmt}, {first_fmt}" 
-
-    id_df['player_name'] = id_df.apply(format_name, axis=1)
-    id_map = dict(zip(id_df['key_mlbam'], id_df['player_name']))
-    df['player_name'] = df['batter'].map(id_map)
-    df = df.dropna(subset=['player_name']).reset_index(drop=True)
+    df['player_name'] = df['batter'].astype(int).astype(str)
     print(f"  After filtering to batting events: {len(df):,} rows, {df['player_name'].nunique()} players")
 
     results = compute_trout_plus(df)
