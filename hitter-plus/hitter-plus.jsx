@@ -713,15 +713,15 @@ const HitterPlusApp = () => {
       }
       setProgress(60);
 
-      // Reuse existing scoring logic by calling processRows directly
-      const blob = new Blob([
-        ['player_name','game_pk','at_bat_number','pitch_number','zone','description','estimated_woba_using_speedangle','strikes','balls'].join(','),
-        ...allRows.map(r => [
-          r.player_name, r.game_pk, r.at_bat_number, r.pitch_number,
-          r.zone, r.description, r.estimated_woba_using_speedangle,
-          r.strikes, r.balls
-        ].join(','))
-      ].join('\n'), { type: 'text/csv' });
+      // Build CSV string and pipe through processStatcast
+      const csvHeader = 'player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls';
+      const csvRows = allRows.map(r =>
+        [r.player_name, r.game_pk, r.at_bat_number, r.pitch_number,
+         r.zone, r.description, r.estimated_woba_using_speedangle,
+         r.strikes, r.balls].join(',')
+      );
+      const csvText = [csvHeader, ...csvRows].join('\n');
+      const blob = new Blob([csvText], { type: 'text/csv' });
       const file = new File([blob], `statcast_${ACTIVE_SEASON}.csv`);
       await processStatcast(file);
 
