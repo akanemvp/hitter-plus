@@ -650,6 +650,8 @@ const HitterPlusApp = () => {
   const [progress, setProgress]     = useState(0);
   const [dataSource, setDataSource] = useState(null); // 'supabase' | 'csv'
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [error, setError]           = useState(null);
+  const [showInfo, setShowInfo]     = useState(false);
 
   // ── Supabase fetch ───────────────────────────────────────────────────────────
   const fetchFromSupabase = useCallback(async () => {
@@ -762,8 +764,7 @@ const HitterPlusApp = () => {
       fetchFromSupabase();
     }
   }, []);
-  const [error, setError] = useState(null);
-  const [showInfo, setShowInfo] = useState(false);
+
   const [activeTab, setActiveTab] = useState('leaderboard');
 
   // ── Mechanics+ Calculation ──────────────────────────────────
