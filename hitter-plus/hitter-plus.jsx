@@ -671,10 +671,10 @@ const HitterPlusApp = () => {
       if (meta) setLastUpdated(meta.last_updated);
       setProgress(10);
 
-      // Fetch all pitch rows for the season in pages (Supabase 1000-row default limit)
+      // Fetch all pitch rows in pages of 1000
       let allRows = [];
       let from = 0;
-      const PAGE = 10000;
+      const PAGE = 1000;
       while (true) {
         const { data, error } = await supabase
           .from(table)
@@ -683,10 +683,11 @@ const HitterPlusApp = () => {
         if (error) throw new Error(error.message);
         if (!data || data.length === 0) break;
         allRows = allRows.concat(data);
+        if (data.length < PAGE) break;
         from += PAGE;
         setProgress(10 + Math.min((from / 700000) * 30, 30));
-        if (data.length < PAGE) break;
       }
+      if (allRows.length === 0) throw new Error('No data in Supabase yet — run the scraper first');
 
       setProgress(40);
 
