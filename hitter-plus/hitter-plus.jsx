@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Search, Upload, TrendingUp, TrendingDown, ArrowUpDown, Info, BarChart3, Target, Zap, ChevronDown, ChevronUp, X, RefreshCw } from 'lucide-react';
+// v2.1 - ID-based matching
 // ── Season config ─────────────────────────────────────────────────────────────
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -1094,18 +1095,18 @@ const HitterPlusApp = () => {
   const combinedPlayers = useMemo(() => {
     if (!troutResults) return [];
 
-    // Build Trout+ lookup by batter_id (MLBAM) — avoids accent/suffix mismatches
+    // player_name in trout_stats is now the MLBAM ID string (e.g. "665487")
+    // BAT_DATA player_id is also the MLBAM ID — match directly
     const troutById = {};
-    const troutByName = {};
     troutResults.forEach(t => {
+      troutById[String(t.player_name)] = t;
       if (t.batter_id) troutById[String(t.batter_id)] = t;
-      troutByName[t.player_name] = t;
     });
 
     return mechanicsData.players
-      .filter(p => troutById[String(p.player_id)] || troutByName[p.name])
+      .filter(p => troutById[String(p.player_id)] !== undefined)
       .map(p => {
-        const td = troutById[String(p.player_id)] || troutByName[p.name];
+        const td = troutById[String(p.player_id)];
         return {
           ...p,
           trout_plus: td.trout_plus,
