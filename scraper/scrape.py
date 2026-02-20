@@ -50,7 +50,11 @@ def compute_trout_plus(df):
         xwoba   = r.get('estimated_woba_using_speedangle')
         pa_key  = f"{r.get('game_pk','')}_{r.get('at_bat_number','')}"
         player_data[player]['pa_set'].add(pa_key)
-        xw = float(xwoba) if xwoba is not None and not (isinstance(xwoba, float) and math.isnan(xwoba)) else None
+        try:
+            xw = float(xwoba) if xwoba is not None else None
+            if xw is not None and math.isnan(xw): xw = None
+        except (TypeError, ValueError):
+            xw = None
         player_data[player]['pitches'].append({
             'zone_cat': categorize_zone(r.get('zone')),
             'xwoba': xw,
