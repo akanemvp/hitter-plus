@@ -676,7 +676,7 @@ const HitterPlusApp = () => {
       while (true) {
         const { data, error } = await supabase
           .from(table)
-          .select('player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls,plate_x,plate_z')
+          .select('player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls')
           .range(from, from + PAGE - 1);
         if (error) throw new Error(error.message);
         if (!data || data.length === 0) break;
@@ -690,7 +690,7 @@ const HitterPlusApp = () => {
 
       // Convert to CSV-like format and pipe through existing processStatcast logic
       // Build a fake File/text blob so we reuse all existing processing code
-      const headers = ['player_name','game_pk','at_bat_number','pitch_number','zone','description','estimated_woba_using_speedangle','strikes','balls','plate_x','plate_z'];
+      const headers = ['player_name','game_pk','at_bat_number','pitch_number','zone','description','estimated_woba_using_speedangle','strikes','balls'];
       const csvLines = [headers.join(',')];
       for (const r of allRows) {
         csvLines.push(headers.map(h => r[h] ?? '').join(','));
@@ -728,6 +728,7 @@ const HitterPlusApp = () => {
       }
 
     } catch (err) {
+      console.error('Supabase fetch error:', err);
       setError(`Supabase fetch failed: ${err.message}`);
     } finally {
       setProcessing(false);
@@ -813,7 +814,7 @@ const HitterPlusApp = () => {
       const text = await file.text();
       const lines = text.split('\n');
       const headers = parseCSV(lines[0]);
-      const req = ['player_name','zone','estimated_woba_using_speedangle','description','plate_x','plate_z','strikes','balls'];
+      const req = ['player_name','zone','estimated_woba_using_speedangle','description','strikes','balls'];
       const missing = req.filter(c => !headers.includes(c));
       if (missing.length > 0) throw new Error(`Missing columns: ${missing.join(', ')}`);
 
@@ -1283,7 +1284,7 @@ const HitterPlusApp = () => {
                   <input type="file" accept=".csv" onChange={handleFile} style={{ display: 'none' }} />
                 </label>
                 <div style={{ color: '#475569', fontSize: 11, marginTop: 12 }}>
-                  Required columns: player_name, zone, estimated_woba_using_speedangle, description, plate_x, plate_z, strikes, balls
+                  Required columns: player_name, zone, estimated_woba_using_speedangle, description, strikes, balls
                 </div>
               </div>
             )}
