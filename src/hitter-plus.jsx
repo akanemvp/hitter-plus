@@ -694,18 +694,31 @@ const HitterPlusApp = () => {
 
       if (allRows.length === 0) throw new Error('No data in Supabase — run the GitHub Actions scraper first');
       setProgress(65);
-
-      // Build CSV and process through existing scoring engine
-      // Quote player_name to handle commas in "Last, First" format
-      const csvHeader = 'player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls';
-      const csvText = csvHeader + '\n' + allRows.map(r =>
-        `"${r.player_name}",${r.game_pk},${r.at_bat_number},${r.pitch_number},${r.zone ?? ''},${r.description ?? ''},${r.estimated_woba_using_speedangle ?? ''},${r.strikes ?? 0},${r.balls ?? 0}`
-      ).join('\n');
-
       setDataSource('supabase');
-      const blob = new Blob([csvText], { type: 'text/csv' });
-      const file = new File([blob], `statcast_${season}.csv`);
-      await processStatcast(file);
+
+      // Process rows directly without CSV conversion
+      const playerData = {};
+      for (const r of allRows) {
+        const player = r.player_name; if (!player) continue;
+        if (!playerData[player]) playerData[player] = { pitches: [], paSet: new Set() };
+        const paKey = `${r.game_pk}_${r.at_bat_number}`;
+        playerData[player].paSet.add(paKey);
+        const desc = r.description ?? '';
+        const strikes = parseInt(r.strikes) || 0;
+        const balls = parseInt(r.balls) || 0;
+        playerData[player].pitches.push({
+          zone_category: categorizeZone(r.zone),
+          xwoba: r.estimated_woba_using_speedangle ? parseFloat(r.estimated_woba_using_speedangle) : null,
+          swing: ['hit_into_play','foul','swinging_strike','swinging_strike_blocked','foul_tip','foul_bunt'].includes(desc) ? 1 : 0,
+          isWalk: ['ball','blocked_ball','hit_by_pitch'].includes(desc) && balls === 3 ? 1 : 0,
+          isKLooking: desc === 'called_strike' && strikes === 2 ? 1 : 0,
+          isKSwinging: ['swinging_strike','swinging_strike_blocked','foul_tip'].includes(desc) && strikes === 2 ? 1 : 0,
+          paKey, pitch_number: parseInt(r.pitch_number) || 0, strikes, balls,
+          description: desc,
+        });
+      }
+      setProgress(70);
+      await processPlayerData(playerData);
 
     } catch (err) {
       console.error('Supabase fetch error:', err);
@@ -784,6 +797,101 @@ const HitterPlusApp = () => {
     });
 
     return { players, correlations, fields };
+  }, []);
+
+  // ── Trout+ Direct Processing (from Supabase rows) ───────────────────────
+  const processPlayerData = useCallback(async (playerData) => {
+    setProgress(75);
+    const results = [];
+    const allPlayers = Object.keys(playerData);
+
+    allPlayers.forEach((player, idx) => {
+      const d = playerData[player];
+      if (d.paSet.size < 100) return;
+
+      const zones = ['upper_inner','upper_middle','upper_outer','middle_inner','middle_middle','middle_outer','lower_inner','lower_middle','lower_outer','shadow','chase'];
+      const allP = d.pitches.filter(p => p.xwoba !== null);
+      const profile = {}; zones.forEach(z => { profile[z] = { xwoba: 0.3, n: 0 }; });
+      profile.overall_xwoba = allP.length > 0 ? allP.reduce((s, p) => s + p.xwoba, 0) / allP.length : 0.3;
+      zones.forEach(z => {
+        const zp = allP.filter(p => p.zone_category === z);
+        profile[z].n = zp.length;
+        profile[z].xwoba = zp.length >= 10 ? zp.reduce((s, p) => s + p.xwoba, 0) / zp.length : profile.overall_xwoba;
+      });
+
+      const paMap = {};
+      d.pitches.forEach(p => {
+        if (!paMap[p.paKey]) paMap[p.paKey] = [];
+        paMap[p.paKey].push(p);
+      });
+      Object.values(paMap).forEach(pa => pa.sort((a, b) => a.pitch_number - b.pitch_number));
+
+      let totalScore = 0, totalWeight = 0;
+      Object.values(paMap).forEach(pa => {
+        const paLen = pa.length;
+        const lastPitch = pa[paLen - 1];
+        const paWalk = lastPitch.isWalk;
+        const paKLooking = lastPitch.isKLooking;
+        const paKSwinging = pa.some(p => p.isKSwinging);
+        const paChaseK = paKSwinging && ['chase','shadow'].includes(lastPitch.zone_category);
+        const paBonus = paWalk ? 10 : paKLooking ? -8 : paChaseK ? -10 : 0;
+
+        pa.forEach((pitch, pitchIdx) => {
+          const zd = profile[pitch.zone_category] || { xwoba: profile.overall_xwoba };
+          const inSZ = !['shadow','chase'].includes(pitch.zone_category);
+          const isSh = pitch.zone_category === 'shadow';
+          const isCh = pitch.zone_category === 'chase';
+          const isHot = inSZ && zd.xwoba >= profile.overall_xwoba + 0.030;
+          const isCold = inSZ && zd.xwoba <= profile.overall_xwoba - 0.030;
+          const { swing: sw, balls: b, strikes: s } = pitch;
+          let score = 50;
+
+          if (b === 3) {
+            if      (isCh)  score = sw ? 0  : 100;
+            else if (isSh)  score = sw ? 25 : 90;
+            else if (isHot) score = sw ? 95 : 50;
+            else            score = sw ? 50 : 50;
+          } else if (s === 2) {
+            if      (isCh)  score = sw ? 0  : 100;
+            else if (isSh)  score = sw ? 40 : 92;
+            else            score = sw ? 78 : 22;
+          } else {
+            if      (isCh)  score = sw ? 0  : 100;
+            else if (isSh)  score = sw ? 20 : 85;
+            else if (isHot) score = sw ? 95 : 32;
+            else if (isCold) score = sw ? 68 : 52;
+            else            score = sw ? 80 : 38;
+          }
+
+          score = Math.max(0, Math.min(100, score + paBonus));
+          if (pitch.isWalk) score = score + 15;
+          const posWeight = Math.min(1.5, 1.0 + pitchIdx * 0.1);
+          totalScore += score * posWeight;
+          totalWeight += posWeight;
+        });
+      });
+
+      const raw_score = totalWeight > 0 ? totalScore / totalWeight : 50;
+      const swingPct = d.pitches.length > 0 ? d.pitches.filter(p => p.swing).length / d.pitches.length : 0;
+      const zoneGrid = [
+        ['upper_inner','upper_middle','upper_outer'],
+        ['middle_inner','middle_middle','middle_outer'],
+        ['lower_inner','lower_middle','lower_outer'],
+      ].map(row => row.map(z => ({ zone: z, xwoba: profile[z]?.xwoba ?? profile.overall_xwoba, n: profile[z]?.n ?? 0 })));
+
+      results.push({ player_name: player, raw_score, total_pa: d.paSet.size, swing_pct: swingPct, zone_grid: zoneGrid, overall_xwoba: profile.overall_xwoba });
+      if (idx % 20 === 0) setProgress(75 + (idx / allPlayers.length) * 20);
+    });
+
+    if (results.length > 0) {
+      const mean = results.reduce((s, p) => s + p.raw_score, 0) / results.length;
+      const std = Math.sqrt(results.reduce((s, p) => s + (p.raw_score - mean) ** 2, 0) / results.length);
+      results.forEach(p => { p.trout_plus = 100 + ((p.raw_score - mean) / std) * 10; });
+    }
+
+    setTroutResults(results);
+    setProgress(100);
+    setProcessing(false);
   }, []);
 
   // ── Trout+ CSV Processing ─── (helpers moved to module level) ───────────
