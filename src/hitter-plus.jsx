@@ -690,7 +690,7 @@ const HitterPlusApp = () => {
 
       // Convert to CSV-like format and pipe through existing processStatcast logic
       // Build a fake File/text blob so we reuse all existing processing code
-      const headers = ['player_name','game_pk','at_bat_number','pitch_number','zone','description','estimated_woba_using_speedangle','strikes','balls'];
+      const headers = ['player_name','game_pk','at_bat_number','pitch_number','zone','description','estimated_woba_using_speedangle','strikes','balls','plate_x','plate_z'];
       const csvLines = [headers.join(',')];
       for (const r of allRows) {
         csvLines.push(headers.map(h => r[h] ?? '').join(','));
