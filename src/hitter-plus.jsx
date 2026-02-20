@@ -653,103 +653,60 @@ const HitterPlusApp = () => {
   const [error, setError]           = useState(null);
   const [showInfo, setShowInfo]     = useState(false);
 
-  // ── Supabase fetch ───────────────────────────────────────────────────────────
+  // ── Supabase fetch using raw REST API (bypasses supabase-js pagination issues) ──
   const fetchFromSupabase = useCallback(async () => {
-    if (!SUPABASE_URL || !SUPABASE_ANON) return; // no credentials — CSV mode only
+    if (!SUPABASE_URL || !SUPABASE_ANON) return;
     setProcessing(true); setError(null); setProgress(5);
 
     try {
-      const table = `statcast_${ACTIVE_SEASON}`;
+      const season = ACTIVE_SEASON;
+      const baseUrl = `${SUPABASE_URL}/rest/v1`;
+      const headers = {
+        'apikey': SUPABASE_ANON,
+        'Authorization': `Bearer ${SUPABASE_ANON}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'count=exact',
+      };
 
-      // Fetch scraper metadata for last_updated display
-      const { data: meta } = await supabase
-        .from('scraper_meta')
-        .select('*')
-        .eq('id', ACTIVE_SEASON)
-        .single();
-
-      if (meta) setLastUpdated(meta.last_updated);
+      // Fetch metadata
+      const metaRes = await fetch(`${baseUrl}/scraper_meta?id=eq.${season}&select=*`, { headers });
+      if (metaRes.ok) {
+        const metaData = await metaRes.json();
+        if (metaData && metaData[0]) setLastUpdated(metaData[0].last_updated);
+      }
       setProgress(10);
 
-      // Fetch all pitch rows in pages of 1000
+      // Fetch all rows using offset pagination via REST API
+      const cols = 'player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls';
       let allRows = [];
-      let from = 0;
-      const PAGE = 1000;
+      let offset = 0;
+      const limit = 1000;
+
       while (true) {
-        const { data, error } = await supabase
-          .from(table)
-          .select('player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls')
-          .range(from, from + PAGE - 1);
-        if (error) throw new Error(error.message);
-        if (!data || data.length === 0) break;
-        allRows = allRows.concat(data);
-        if (data.length < PAGE) break;
-        from += PAGE;
-        setProgress(10 + Math.min((from / 700000) * 30, 30));
+        const url = `${baseUrl}/statcast_${season}?select=${cols}&limit=${limit}&offset=${offset}`;
+        const res = await fetch(url, { headers });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const rows = await res.json();
+        if (!rows || rows.length === 0) break;
+        allRows = allRows.concat(rows);
+        if (rows.length < limit) break;
+        offset += limit;
+        setProgress(10 + Math.min((offset / 700000) * 55, 55));
       }
-      if (allRows.length === 0) throw new Error('No data in Supabase yet — run the scraper first');
 
-      setProgress(40);
+      if (allRows.length === 0) throw new Error('No data in Supabase — run the GitHub Actions scraper first');
+      setProgress(65);
 
-      // Process rows directly — no fake CSV needed
-      setDataSource('supabase');
-      const playerData = {};
-      for (const row of allRows) {
-        const player = row.player_name; if (!player) continue;
-        if (!playerData[player]) playerData[player] = { pitches: [], paSet: new Set() };
-        playerData[player].paSet.add(`${row.game_pk}_${row.at_bat_number}`);
-        const swing       = ['hit_into_play','foul','swinging_strike','swinging_strike_blocked','foul_tip','foul_bunt'].includes(row.description) ? 1 : 0;
-        const isWalk      = ['ball','blocked_ball','hit_by_pitch'].includes(row.description) && parseInt(row.balls) === 3 ? 1 : 0;
-        const isKLooking  = row.description === 'called_strike' && parseInt(row.strikes) === 2 ? 1 : 0;
-        const isKSwinging = ['swinging_strike','swinging_strike_blocked','foul_tip'].includes(row.description) && parseInt(row.strikes) === 2 ? 1 : 0;
-        const paKey       = `${row.game_pk}_${row.at_bat_number}`;
-        playerData[player].pitches.push({
-          zone_category: categorizeZone(row.zone),
-          xwoba: row.estimated_woba_using_speedangle ? parseFloat(row.estimated_woba_using_speedangle) : null,
-          swing, isWalk, isKLooking, isKSwinging, paKey,
-          description: row.description,
-          strikes: parseInt(row.strikes) || 0,
-          balls: parseInt(row.balls) || 0,
-        });
-      }
-      setProgress(60);
-
-      // Build CSV string and pipe through processStatcast
+      // Build CSV and process through existing scoring engine
       const csvHeader = 'player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls';
-      const csvRows = allRows.map(r =>
-        [r.player_name, r.game_pk, r.at_bat_number, r.pitch_number,
-         r.zone, r.description, r.estimated_woba_using_speedangle,
-         r.strikes, r.balls].join(',')
-      );
-      const csvText = [csvHeader, ...csvRows].join('\n');
+      const csvText = csvHeader + '\n' + allRows.map(r =>
+        `${r.player_name},${r.game_pk},${r.at_bat_number},${r.pitch_number},${r.zone},${r.description},${r.estimated_woba_using_speedangle ?? ''},${r.strikes},${r.balls}`
+      ).join('\n');
+
+      setDataSource('supabase');
       const blob = new Blob([csvText], { type: 'text/csv' });
-      const file = new File([blob], `statcast_${ACTIVE_SEASON}.csv`);
+      const file = new File([blob], `statcast_${season}.csv`);
       await processStatcast(file);
-
-      // Also fetch bat tracking aggregates
-      const { data: batRows, error: batErr } = await supabase
-        .from(`bat_tracking_${ACTIVE_SEASON}`)
-        .select('*');
-
-      if (!batErr && batRows && batRows.length > 0) {
-        // Transform Supabase bat tracking into the BAT_DATA format
-        const players = batRows
-          .filter(r => (r.total_pa ?? 0) >= PA_MIN)
-          .map(r => ({
-            player_id: String(r.player_id),
-            name: r.player_name,
-            bat_speed: r.bat_speed ?? 0,
-            swing_tilt: r.swing_tilt ?? 0,
-            attack_angle: r.attack_angle ?? 0,
-            attack_direction: r.attack_direction ?? 0,
-            intercept_x: r.intercept_x ?? 0,
-            intercept_y: r.intercept_y ?? 0,
-            swing_length: r.swing_length ?? 0,
-            swing_efficiency: r.swing_efficiency ?? 0,
-            xwoba: r.xwoba ?? 0,
-          }));
-        setMechanicsData({ players });
-      }
 
     } catch (err) {
       console.error('Supabase fetch error:', err);
