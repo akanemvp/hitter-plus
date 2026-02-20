@@ -150,7 +150,18 @@ def main():
 
     needed = ['player_name','game_pk','at_bat_number','pitch_number','zone',
               'description','estimated_woba_using_speedangle','strikes','balls']
+    # Add batter_name column - in Statcast, player_name IS the batter name
+    # But we need to exclude pitcher-only appearances by checking for valid batting descriptions
     df = df[[c for c in needed if c in df.columns]].dropna(subset=['player_name']).reset_index(drop=True)
+    
+    # Filter to actual batting events only (exclude null/empty descriptions)
+    batting_descs = {
+        'ball', 'called_strike', 'swinging_strike', 'hit_into_play', 'foul',
+        'blocked_ball', 'hit_by_pitch', 'swinging_strike_blocked', 'foul_tip',
+        'foul_bunt', 'missed_bunt', 'bunt_foul_tip'
+    }
+    df = df[df['description'].isin(batting_descs)].reset_index(drop=True)
+    print(f"  After filtering to batting events: {len(df):,} rows, {df['player_name'].nunique()} players")
 
     results = compute_trout_plus(df)
 
