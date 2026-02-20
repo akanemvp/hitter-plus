@@ -698,9 +698,10 @@ const HitterPlusApp = () => {
       setProgress(65);
 
       // Build CSV and process through existing scoring engine
+      // Quote player_name to handle commas in "Last, First" format
       const csvHeader = 'player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls';
       const csvText = csvHeader + '\n' + allRows.map(r =>
-        `${r.player_name},${r.game_pk},${r.at_bat_number},${r.pitch_number},${r.zone},${r.description},${r.estimated_woba_using_speedangle ?? ''},${r.strikes},${r.balls}`
+        `"${r.player_name}",${r.game_pk},${r.at_bat_number},${r.pitch_number},${r.zone ?? ''},${r.description ?? ''},${r.estimated_woba_using_speedangle ?? ''},${r.strikes ?? 0},${r.balls ?? 0}`
       ).join('\n');
 
       setDataSource('supabase');
