@@ -1,11 +1,8 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Search, Upload, TrendingUp, TrendingDown, ArrowUpDown, Info, BarChart3, Target, Zap, ChevronDown, ChevronUp, X, RefreshCw } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
-
 // ── Season config ─────────────────────────────────────────────────────────────
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase      = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const SEASON_2026_START = new Date('2026-03-25');
 const TODAY             = new Date();
