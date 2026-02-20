@@ -660,6 +660,7 @@ const HitterPlusApp = () => {
 
     try {
       const season = ACTIVE_SEASON;
+      console.log('fetchFromSupabase START', { season, url: SUPABASE_URL });
       const baseUrl = `${SUPABASE_URL}/rest/v1`;
       const headers = {
         'apikey': SUPABASE_ANON,
@@ -711,7 +712,8 @@ const HitterPlusApp = () => {
 
     } catch (err) {
       console.error('Supabase fetch error:', err);
-      setError(`Supabase fetch failed: ${err.message}`);
+      console.error('Stack:', err.stack);
+      setError(`Supabase fetch failed: ${err.message} | ${err.stack?.split('\n')[1] ?? ''}`);
     } finally {
       setProcessing(false);
     }
