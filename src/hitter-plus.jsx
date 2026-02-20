@@ -663,7 +663,7 @@ const HitterPlusApp = () => {
         'apikey': SUPABASE_ANON,
         'Authorization': `Bearer ${SUPABASE_ANON}`,
         'Content-Type': 'application/json',
-        'Prefer': 'count=exact',
+        'Prefer': 'count=none',
       };
 
       // Fetch metadata
@@ -678,7 +678,7 @@ const HitterPlusApp = () => {
       const cols = 'player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls';
       let allRows = [];
       let offset = 0;
-      const limit = 1000;
+      const limit = 10000;
 
       while (true) {
         const url = `${baseUrl}/statcast_${season}?select=${cols}&limit=${limit}&offset=${offset}`;
