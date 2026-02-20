@@ -718,6 +718,10 @@ const HitterPlusApp = () => {
         });
       }
       setProgress(70);
+      const samplePlayer = Object.keys(playerData)[0];
+      console.log('Sample player:', samplePlayer, 'PAs:', playerData[samplePlayer]?.paSet.size, 'pitches:', playerData[samplePlayer]?.pitches.length);
+      console.log('Total players:', Object.keys(playerData).length);
+      console.log('Sample paSet entries:', samplePlayer ? [...playerData[samplePlayer].paSet].slice(0,3) : []);
       await processPlayerData(playerData);
 
     } catch (err) {
