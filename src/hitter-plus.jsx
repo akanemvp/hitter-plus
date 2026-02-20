@@ -671,25 +671,23 @@ const HitterPlusApp = () => {
       if (meta) setLastUpdated(meta.last_updated);
       setProgress(10);
 
-      // Fetch all pitch rows in pages of 1000 (Supabase free tier limit)
+      // Fetch all pitch rows in pages of 1000
       let allRows = [];
       let from = 0;
       const PAGE = 1000;
-      let keepGoing = true;
-      while (keepGoing) {
+      while (true) {
         const { data, error } = await supabase
           .from(table)
           .select('player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls')
-          .range(from, from + PAGE - 1)
-          .order('id', { ascending: true });
-        if (error) throw new Error(`Supabase range error: ${error.message}`);
-        if (!data || data.length === 0) { keepGoing = false; break; }
+          .range(from, from + PAGE - 1);
+        if (error) throw new Error(error.message);
+        if (!data || data.length === 0) break;
         allRows = allRows.concat(data);
-        from += data.length;
+        if (data.length < PAGE) break;
+        from += PAGE;
         setProgress(10 + Math.min((from / 700000) * 30, 30));
-        if (data.length < PAGE) keepGoing = false;
       }
-      if (allRows.length === 0) throw new Error('No data returned from Supabase — has the scraper run yet?');
+      if (allRows.length === 0) throw new Error('No data in Supabase yet — run the scraper first');
 
       setProgress(40);
 
