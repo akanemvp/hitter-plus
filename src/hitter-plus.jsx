@@ -1090,21 +1090,27 @@ const HitterPlusApp = () => {
   const combinedPlayers = useMemo(() => {
     if (!troutResults) return [];
 
-    // Build Trout+ lookup by name (last, first format matching)
-    const troutMap = {};
-    troutResults.forEach(t => { troutMap[t.player_name] = { trout_plus: t.trout_plus, swing_pct: t.swing_pct, zone_grid: t.zone_grid, overall_xwoba: t.overall_xwoba }; });
+    // Build Trout+ lookup by batter_id (MLBAM) — avoids accent/suffix mismatches
+    const troutById = {};
+    const troutByName = {};
+    troutResults.forEach(t => {
+      if (t.batter_id) troutById[String(t.batter_id)] = t;
+      troutByName[t.player_name] = t;
+    });
 
-    // Match: bat tracking names are "Last, First", Statcast names are "Last, First"
     return mechanicsData.players
-      .filter(p => troutMap[p.name] !== undefined)
-      .map(p => ({
-        ...p,
-        trout_plus: troutMap[p.name].trout_plus,
-        swing_pct: troutMap[p.name].swing_pct,
-        zone_grid: troutMap[p.name].zone_grid,
-        overall_xwoba: troutMap[p.name].overall_xwoba,
-        hitter_plus: p.mechanics_plus * 0.45 + troutMap[p.name].trout_plus * 0.55
-      }))
+      .filter(p => troutById[String(p.player_id)] || troutByName[p.name])
+      .map(p => {
+        const td = troutById[String(p.player_id)] || troutByName[p.name];
+        return {
+          ...p,
+          trout_plus: td.trout_plus,
+          swing_pct: td.swing_pct,
+          zone_grid: td.zone_grid,
+          overall_xwoba: td.overall_xwoba,
+          hitter_plus: p.mechanics_plus * 0.45 + td.trout_plus * 0.55
+        };
+      })
       .sort((a, b) => b.hitter_plus - a.hitter_plus)
       .map((p, i) => ({ ...p, rank: i + 1 }));
   }, [mechanicsData, troutResults]);
