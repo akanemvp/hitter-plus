@@ -43,7 +43,7 @@ def compute_trout_plus(df):
         player = r.get('player_name')
         if not player or pd.isna(player): continue
         if player not in player_data:
-            player_data[player] = {'pitches': [], 'pa_set': set()}
+            player_data[player] = {'pitches': [], 'pa_set': set(), 'batter_id': int(r.get('batter', 0))}
         desc    = str(r.get('description', '') or '')
         strikes = int(r.get('strikes', 0) or 0)
         balls   = int(r.get('balls', 0) or 0)
@@ -113,7 +113,7 @@ def compute_trout_plus(df):
         raw = total_score / total_weight if total_weight > 0 else 50
         swing_pct = sum(p['swing'] for p in d['pitches']) / len(d['pitches']) if d['pitches'] else 0
         results.append({
-            'player_name': player, 'total_pa': len(d['pa_set']),
+            'player_name': player, 'batter_id': d['batter_id'], 'total_pa': len(d['pa_set']),
             'total_pitches': len(d['pitches']), 'swing_pct': swing_pct,
             'overall_xwoba': overall, 'raw_score': raw,
             'zone_upper_inner': profile.get('upper_inner', overall),
