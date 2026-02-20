@@ -677,6 +677,10 @@ const HitterPlusApp = () => {
       if (!statsRes.ok) throw new Error(`HTTP ${statsRes.status}: ${await statsRes.text()}`);
       const stats = await statsRes.json();
       console.log('Trout stats fetched:', stats.length, 'players');
+      console.log('Sample row:', JSON.stringify(stats[0]));
+      // Check ID matching
+      const batIds = new Set(stats.map(s => String(s.batter_id)).filter(Boolean));
+      console.log('batter_ids in stats:', batIds.size, 'sample:', [...batIds].slice(0,5));
 
       if (!stats || stats.length === 0) throw new Error('No Trout+ stats found — run the GitHub Actions scraper');
       setProgress(60);
