@@ -650,84 +650,58 @@ const HitterPlusApp = () => {
   const [error, setError]           = useState(null);
   const [showInfo, setShowInfo]     = useState(false);
 
-  // ── Supabase fetch using raw REST API (bypasses supabase-js pagination issues) ──
+  // ── Supabase fetch — loads pre-computed Trout+ stats (tiny table, fast) ──
   const fetchFromSupabase = useCallback(async () => {
     if (!SUPABASE_URL || !SUPABASE_ANON) return;
-    setProcessing(true); setError(null); setProgress(5);
+    setProcessing(true); setError(null); setProgress(10);
+    console.log('fetchFromSupabase START', { season: ACTIVE_SEASON, url: SUPABASE_URL });
 
     try {
-      const season = ACTIVE_SEASON;
-      console.log('fetchFromSupabase START', { season, url: SUPABASE_URL });
-      const baseUrl = `${SUPABASE_URL}/rest/v1`;
+      const base = `${SUPABASE_URL}/rest/v1`;
       const headers = {
         'apikey': SUPABASE_ANON,
         'Authorization': `Bearer ${SUPABASE_ANON}`,
         'Content-Type': 'application/json',
-        'Prefer': 'count=none',
       };
 
       // Fetch metadata
-      const metaRes = await fetch(`${baseUrl}/scraper_meta?id=eq.${season}&select=*`, { headers });
+      const metaRes = await fetch(`${base}/scraper_meta?id=eq.${ACTIVE_SEASON}&select=*`, { headers });
       if (metaRes.ok) {
-        const metaData = await metaRes.json();
-        if (metaData && metaData[0]) setLastUpdated(metaData[0].last_updated);
+        const meta = await metaRes.json();
+        if (meta?.[0]) setLastUpdated(meta[0].last_updated);
       }
-      setProgress(10);
+      setProgress(20);
 
-      // Fetch all rows using offset pagination via REST API
-      const cols = 'player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls';
-      let allRows = [];
-      let offset = 0;
-      const limit = 10000;
+      // Fetch pre-computed Trout+ stats (~500 rows, fast)
+      const statsRes = await fetch(`${base}/trout_stats_${ACTIVE_SEASON}?select=*&limit=1000`, { headers });
+      if (!statsRes.ok) throw new Error(`HTTP ${statsRes.status}: ${await statsRes.text()}`);
+      const stats = await statsRes.json();
+      console.log('Trout stats fetched:', stats.length, 'players');
 
-      while (true) {
-        const url = `${baseUrl}/statcast_${season}?select=${cols}&limit=${limit}&offset=${offset}`;
-        const res = await fetch(url, { headers });
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-        const rows = await res.json();
-        if (!rows || rows.length === 0) break;
-        allRows = allRows.concat(rows);
-        if (rows.length < limit) break;
-        offset += limit;
-        setProgress(10 + Math.min((offset / 700000) * 55, 55));
-      }
+      if (!stats || stats.length === 0) throw new Error('No Trout+ stats found — run the GitHub Actions scraper');
+      setProgress(60);
 
-      if (allRows.length === 0) throw new Error('No data in Supabase — run the GitHub Actions scraper first');
-      setProgress(65);
+      // Convert to troutResults format expected by combinedPlayers
+      const results = stats.map(r => ({
+        player_name: r.player_name,
+        trout_plus: r.trout_plus,
+        total_pa: r.total_pa,
+        swing_pct: r.swing_pct,
+        overall_xwoba: r.overall_xwoba,
+        zone_grid: [
+          [{zone:'upper_inner', xwoba:r.zone_upper_inner, n:1}, {zone:'upper_middle', xwoba:r.zone_upper_middle, n:1}, {zone:'upper_outer', xwoba:r.zone_upper_outer, n:1}],
+          [{zone:'middle_inner',xwoba:r.zone_middle_inner,n:1}, {zone:'middle_middle',xwoba:r.zone_middle_middle,n:1}, {zone:'middle_outer',xwoba:r.zone_middle_outer,n:1}],
+          [{zone:'lower_inner', xwoba:r.zone_lower_inner, n:1}, {zone:'lower_middle', xwoba:r.zone_lower_middle, n:1}, {zone:'lower_outer', xwoba:r.zone_lower_outer, n:1}],
+        ],
+      }));
+
+      setTroutResults(results);
       setDataSource('supabase');
-
-      // Process rows directly without CSV conversion
-      const playerData = {};
-      for (const r of allRows) {
-        const player = r.player_name; if (!player) continue;
-        if (!playerData[player]) playerData[player] = { pitches: [], paSet: new Set() };
-        const paKey = `${r.game_pk}_${r.at_bat_number}`;
-        playerData[player].paSet.add(paKey);
-        const desc = r.description ?? '';
-        const strikes = parseInt(r.strikes) || 0;
-        const balls = parseInt(r.balls) || 0;
-        playerData[player].pitches.push({
-          zone_category: categorizeZone(r.zone),
-          xwoba: r.estimated_woba_using_speedangle ? parseFloat(r.estimated_woba_using_speedangle) : null,
-          swing: ['hit_into_play','foul','swinging_strike','swinging_strike_blocked','foul_tip','foul_bunt'].includes(desc) ? 1 : 0,
-          isWalk: ['ball','blocked_ball','hit_by_pitch'].includes(desc) && balls === 3 ? 1 : 0,
-          isKLooking: desc === 'called_strike' && strikes === 2 ? 1 : 0,
-          isKSwinging: ['swinging_strike','swinging_strike_blocked','foul_tip'].includes(desc) && strikes === 2 ? 1 : 0,
-          paKey, pitch_number: parseInt(r.pitch_number) || 0, strikes, balls,
-          description: desc,
-        });
-      }
-      setProgress(70);
-      const samplePlayer = Object.keys(playerData)[0];
-      console.log('Sample player:', samplePlayer, 'PAs:', playerData[samplePlayer]?.paSet.size, 'pitches:', playerData[samplePlayer]?.pitches.length);
-      console.log('Total players:', Object.keys(playerData).length);
-      console.log('Sample paSet entries:', samplePlayer ? [...playerData[samplePlayer].paSet].slice(0,3) : []);
-      await processPlayerData(playerData);
+      setProgress(100);
 
     } catch (err) {
       console.error('Supabase fetch error:', err);
-      console.error('Stack:', err.stack);
-      setError(`Supabase fetch failed: ${err.message} | ${err.stack?.split('\n')[1] ?? ''}`);
+      setError(`Supabase fetch failed: ${err.message}`);
     } finally {
       setProcessing(false);
     }
