@@ -676,7 +676,7 @@ const HitterPlusApp = () => {
       while (true) {
         const { data, error } = await supabase
           .from(table)
-          .select('player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls,pitch_number')
+          .select('player_name,game_pk,at_bat_number,pitch_number,zone,description,estimated_woba_using_speedangle,strikes,balls,plate_x,plate_z')
           .range(from, from + PAGE - 1);
         if (error) throw new Error(error.message);
         if (!data || data.length === 0) break;
