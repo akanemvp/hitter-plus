@@ -688,18 +688,39 @@ const HitterPlusApp = () => {
 
       setProgress(40);
 
-      // Convert to CSV-like format and pipe through existing processStatcast logic
-      // Build a fake File/text blob so we reuse all existing processing code
-      const headers = ['player_name','game_pk','at_bat_number','pitch_number','zone','description','estimated_woba_using_speedangle','strikes','balls'];
-      const csvLines = [headers.join(',')];
-      for (const r of allRows) {
-        csvLines.push(headers.map(h => r[h] ?? '').join(','));
-      }
-      const csvText = csvLines.join('\n');
-      const blob = new Blob([csvText], { type: 'text/csv' });
-      const file = new File([blob], `statcast_${ACTIVE_SEASON}.csv`);
-
+      // Process rows directly — no fake CSV needed
       setDataSource('supabase');
+      const playerData = {};
+      for (const row of allRows) {
+        const player = row.player_name; if (!player) continue;
+        if (!playerData[player]) playerData[player] = { pitches: [], paSet: new Set() };
+        playerData[player].paSet.add(`${row.game_pk}_${row.at_bat_number}`);
+        const swing       = ['hit_into_play','foul','swinging_strike','swinging_strike_blocked','foul_tip','foul_bunt'].includes(row.description) ? 1 : 0;
+        const isWalk      = ['ball','blocked_ball','hit_by_pitch'].includes(row.description) && parseInt(row.balls) === 3 ? 1 : 0;
+        const isKLooking  = row.description === 'called_strike' && parseInt(row.strikes) === 2 ? 1 : 0;
+        const isKSwinging = ['swinging_strike','swinging_strike_blocked','foul_tip'].includes(row.description) && parseInt(row.strikes) === 2 ? 1 : 0;
+        const paKey       = `${row.game_pk}_${row.at_bat_number}`;
+        playerData[player].pitches.push({
+          zone_category: categorizeZone(row.zone),
+          xwoba: row.estimated_woba_using_speedangle ? parseFloat(row.estimated_woba_using_speedangle) : null,
+          swing, isWalk, isKLooking, isKSwinging, paKey,
+          description: row.description,
+          strikes: parseInt(row.strikes) || 0,
+          balls: parseInt(row.balls) || 0,
+        });
+      }
+      setProgress(60);
+
+      // Reuse existing scoring logic by calling processRows directly
+      const blob = new Blob([
+        ['player_name','game_pk','at_bat_number','pitch_number','zone','description','estimated_woba_using_speedangle','strikes','balls'].join(','),
+        ...allRows.map(r => [
+          r.player_name, r.game_pk, r.at_bat_number, r.pitch_number,
+          r.zone, r.description, r.estimated_woba_using_speedangle,
+          r.strikes, r.balls
+        ].join(','))
+      ].join('\n'), { type: 'text/csv' });
+      const file = new File([blob], `statcast_${ACTIVE_SEASON}.csv`);
       await processStatcast(file);
 
       // Also fetch bat tracking aggregates
