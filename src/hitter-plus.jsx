@@ -1302,7 +1302,7 @@ const HitterPlusApp = () => {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20, fontSize: 13, lineHeight: 1.7 }}>
               <div>
-                <div style={{ color: '#3b82f6', fontWeight: 700, marginBottom: 6, fontSize: 14 }}>⚡ Mechanics+ (50%)</div>
+                <div style={{ color: '#3b82f6', fontWeight: 700, marginBottom: 6, fontSize: 14 }}>⚡ Mechanics+</div>
                 <p style={{ color: '#94a3b8' }}>
                   Correlation-weighted z-score composite of 7 swing mechanics: bat speed, attack angle, swing efficiency,
                   attack direction, swing path tilt, intercept X, and intercept Y. Each mechanic is weighted by its
@@ -1310,7 +1310,7 @@ const HitterPlusApp = () => {
                 </p>
               </div>
               <div>
-                <div style={{ color: '#8b5cf6', fontWeight: 700, marginBottom: 6, fontSize: 14 }}>🎯 Trout+ (50%)</div>
+                <div style={{ color: '#8b5cf6', fontWeight: 700, marginBottom: 6, fontSize: 14 }}>🎯 Trout+</div>
                 <p style={{ color: '#94a3b8' }}>
                   Pitch-by-pitch decision scoring (0-100 per pitch) based on zone location, count situation,
                   and player hot zones (zone xwOBA ≥ overall + .030). Rewards swinging at hittable pitches
@@ -1320,8 +1320,9 @@ const HitterPlusApp = () => {
               <div>
                 <div style={{ color: '#ec4899', fontWeight: 700, marginBottom: 6, fontSize: 14 }}>🏆 Hitter+</div>
                 <p style={{ color: '#94a3b8' }}>
-                  Simple average of Mechanics+ and Trout+. Captures the complete hitter: both <em>how</em> they swing
-                  and <em>when</em> they swing. 100 = league average, 110+ = great, 120+ = elite.
+                  Weighted geometric mean of Trout+ and Mechanics+: <em>(Trout+)^1.1 × (Mech+)^0.9 / 100</em>.
+                  Slightly emphasizes decision-making while still rewarding elite swing mechanics.
+                  100 = league average, 110+ = great, 120+ = elite.
                 </p>
               </div>
             </div>
