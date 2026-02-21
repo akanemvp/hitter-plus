@@ -1105,7 +1105,7 @@ const HitterPlusApp = () => {
           swing_pct: td.swing_pct,
           zone_grid: td.zone_grid,
           overall_xwoba: td.overall_xwoba,
-          hitter_plus: (1 + 0.85) / (1 / td.trout_plus + 0.85 / p.mechanics_plus)
+          hitter_plus: (Math.pow(td.trout_plus, 1.1) * Math.pow(p.mechanics_plus, 0.9)) / 100
         };
       })
       .sort((a, b) => b.hitter_plus - a.hitter_plus)
