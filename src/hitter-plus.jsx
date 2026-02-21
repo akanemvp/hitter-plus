@@ -529,25 +529,23 @@ const bucketKey = (b, s, zoneType) => {
 };
 
 // ── Mini Zone Grid (inline table cell) ──────────────────────────────────────
+const LEAGUE_AVG_XWOBA = 0.312; // 2025 MLB league average xwOBA
+
 const MiniZoneGrid = ({ grid }) => {
   if (!grid || !grid.length) return <div style={{ color: '#334155', fontSize: 10 }}>—</div>;
 
-  const flat = grid.flat();
-  const vals = flat.map(c => c.xwoba);
-  const minV = Math.min(...vals);
-  const maxV = Math.max(...vals);
-  const range = maxV - minV || 0.001;
-
-  const cellColor = (t) => {
-    // Smooth interpolation: red(220,38,38) → yellow(250,204,21) → green(34,197,94)
+  const cellColor = (xwoba) => {
+    // Color relative to league average: red = well below, green = well above
+    const diff = xwoba - LEAGUE_AVG_XWOBA;
+    const t = Math.max(0, Math.min(1, (diff + 0.12) / 0.24)); // ±0.12 range
     let r, g, b;
     if (t < 0.5) {
-      const u = t * 2; // 0→1
+      const u = t * 2;
       r = Math.round(220 + (250 - 220) * u);
       g = Math.round(38  + (204 - 38)  * u);
       b = Math.round(38  + (21  - 38)  * u);
     } else {
-      const u = (t - 0.5) * 2; // 0→1
+      const u = (t - 0.5) * 2;
       r = Math.round(250 + (34  - 250) * u);
       g = Math.round(204 + (197 - 204) * u);
       b = Math.round(21  + (94  - 21)  * u);
@@ -560,8 +558,7 @@ const MiniZoneGrid = ({ grid }) => {
       {grid.map((row, ri) => (
         <div key={ri} style={{ display: 'flex', gap: 2 }}>
           {row.map((cell, ci) => {
-            const t = (cell.xwoba - minV) / range;
-            const { bg } = cellColor(t);
+            const { bg } = cellColor(cell.xwoba);
             return (
               <div key={ci} style={{
                 width: 40, height: 40, borderRadius: 4,
@@ -601,12 +598,6 @@ const ZoneGrid = ({ grid, avg }) => {
     );
   }
 
-  const flat = grid.flat();
-  const vals = flat.map(c => c.xwoba);
-  const minV = Math.min(...vals);
-  const maxV = Math.max(...vals);
-  const range = maxV - minV || 0.001;
-
   return (
     <div>
       <div style={{ fontSize: 10, color: '#64748b', letterSpacing: '0.1em', fontWeight: 600, marginBottom: 10 }}>xwOBA ZONE PROFILE</div>
@@ -614,7 +605,8 @@ const ZoneGrid = ({ grid, avg }) => {
         {grid.map((row, ri) => (
           <div key={ri} style={{ display: 'flex', gap: 4 }}>
             {row.map((cell, ci) => {
-              const t = (cell.xwoba - minV) / range;
+              const diff = cell.xwoba - LEAGUE_AVG_XWOBA;
+              const t = Math.max(0, Math.min(1, (diff + 0.12) / 0.24));
               const { bg, text } = zoneColor(t);
               return (
                 <div key={ci} style={{
@@ -1152,6 +1144,22 @@ const HitterPlusApp = () => {
     return den > 0 ? num / den : 0;
   }, [combinedPlayers]);
 
+  // ── Mech+ vs xwOBA Pearson Correlation ─────────────────────
+  const mechXwobaCorr = useMemo(() => {
+    if (combinedPlayers.length < 5) return null;
+    const pairs = combinedPlayers.filter(p => p.mechanics_plus != null && p.xwoba != null);
+    const n = pairs.length;
+    if (n < 5) return null;
+    const mx = pairs.reduce((s, p) => s + p.mechanics_plus, 0) / n;
+    const my = pairs.reduce((s, p) => s + p.xwoba, 0) / n;
+    const num = pairs.reduce((s, p) => s + (p.mechanics_plus - mx) * (p.xwoba - my), 0);
+    const den = Math.sqrt(
+      pairs.reduce((s, p) => s + (p.mechanics_plus - mx) ** 2, 0) *
+      pairs.reduce((s, p) => s + (p.xwoba - my) ** 2, 0)
+    );
+    return den > 0 ? num / den : 0;
+  }, [combinedPlayers]);
+
   // ── Sorting & Filtering ─────────────────────────────────────
   const sortedPlayers = useMemo(() => {
     const list = [...combinedPlayers];
@@ -1380,7 +1388,6 @@ const HitterPlusApp = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
               {[
                 { label: 'PLAYERS', value: combinedPlayers.length, color: '#3b82f6' },
-                { label: 'HIGHEST H+', value: combinedPlayers[0]?.hitter_plus?.toFixed(1), sub: combinedPlayers[0]?.name, color: '#f59e0b' },
                 { label: 'AVG MECH+', value: (combinedPlayers.reduce((s, p) => s + p.mechanics_plus, 0) / combinedPlayers.length).toFixed(1), color: '#3b82f6' },
                 { label: 'AVG TROUT+', value: (combinedPlayers.reduce((s, p) => s + p.trout_plus, 0) / combinedPlayers.length).toFixed(1), color: '#8b5cf6' },
               ].map((stat, i) => (
@@ -1433,6 +1440,33 @@ const HitterPlusApp = () => {
                   }}>
                     <div style={{ fontSize: 10, color: '#64748b', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 4 }}>
                       HITTER+ × xwOBA r
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: corrColor, fontFamily: "'Outfit', sans-serif" }}>
+                      {r.toFixed(3)}
+                    </div>
+                    <div style={{ marginTop: 6, height: 4, background: 'rgba(255,255,255,0.07)', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${pct}%`, height: '100%', borderRadius: 2,
+                        background: `linear-gradient(90deg, ${corrColor}99, ${corrColor})`
+                      }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: corrColor, marginTop: 4, fontWeight: 600 }}>{corrLabel}</div>
+                  </div>
+                );
+              })()}
+              {/* Mech+ vs xwOBA correlation card */}
+              {mechXwobaCorr !== null && (() => {
+                const r = mechXwobaCorr;
+                const pct = Math.abs(r) * 100;
+                const corrColor = r >= 0.5 ? '#22c55e' : r >= 0.3 ? '#a3e635' : r >= 0.1 ? '#f59e0b' : '#ef4444';
+                const corrLabel = r >= 0.5 ? 'STRONG' : r >= 0.3 ? 'MODERATE' : r >= 0.1 ? 'WEAK' : 'NONE';
+                return (
+                  <div style={{
+                    background: 'rgba(30, 41, 59, 0.5)', border: `1px solid ${corrColor}30`,
+                    borderRadius: 10, padding: '14px 16px'
+                  }}>
+                    <div style={{ fontSize: 10, color: '#64748b', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 4 }}>
+                      MECH+ × xwOBA r
                     </div>
                     <div style={{ fontSize: 22, fontWeight: 700, color: corrColor, fontFamily: "'Outfit', sans-serif" }}>
                       {r.toFixed(3)}
