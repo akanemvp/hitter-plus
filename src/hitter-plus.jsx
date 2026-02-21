@@ -1105,11 +1105,15 @@ const HitterPlusApp = () => {
           swing_pct: td.swing_pct,
           zone_grid: td.zone_grid,
           overall_xwoba: td.overall_xwoba,
-          hitter_plus: (Math.pow(td.trout_plus, 1.1) * Math.pow(p.mechanics_plus, 0.9)) / 100
+          raw_hitter: (Math.pow(td.trout_plus, 1.1) * Math.pow(p.mechanics_plus, 0.9)) / 100
         };
       })
-      .sort((a, b) => b.hitter_plus - a.hitter_plus)
-      .map((p, i) => ({ ...p, rank: i + 1 }));
+      .sort((a, b) => b.raw_hitter - a.raw_hitter)
+      .map((p, i, arr) => {
+        const mean = arr.reduce((s, x) => s + x.raw_hitter, 0) / arr.length;
+        const std = Math.sqrt(arr.reduce((s, x) => s + (x.raw_hitter - mean) ** 2, 0) / arr.length);
+        return { ...p, hitter_plus: std > 0 ? 100 + ((p.raw_hitter - mean) / std) * 10 : 100, rank: i + 1 };
+      });
   }, [mechanicsData, troutResults]);
 
   // ── Trout+ vs xwOBA Pearson Correlation ────────────────────
