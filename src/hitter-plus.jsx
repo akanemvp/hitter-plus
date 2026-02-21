@@ -1105,7 +1105,7 @@ const HitterPlusApp = () => {
           swing_pct: td.swing_pct,
           zone_grid: td.zone_grid,
           overall_xwoba: td.overall_xwoba,
-          hitter_plus: p.mechanics_plus * 0.45 + td.trout_plus * 0.55
+          hitter_plus: (1 + 0.85) / (1 / td.trout_plus + 0.85 / p.mechanics_plus)
         };
       })
       .sort((a, b) => b.hitter_plus - a.hitter_plus)
@@ -1400,9 +1400,9 @@ const HitterPlusApp = () => {
                   {stat.sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{stat.sub}</div>}
                 </div>
               ))}
-              {/* Trout+ vs xwOBA Pearson r */}
-              {troutXwobaCorr !== null && (() => {
-                const r = troutXwobaCorr;
+              {/* Hitter+ vs xwOBA correlation card */}
+              {hitterXwobaCorr !== null && (() => {
+                const r = hitterXwobaCorr;
                 const pct = Math.abs(r) * 100;
                 const corrColor = r >= 0.5 ? '#22c55e' : r >= 0.3 ? '#a3e635' : r >= 0.1 ? '#f59e0b' : '#ef4444';
                 const corrLabel = r >= 0.5 ? 'STRONG' : r >= 0.3 ? 'MODERATE' : r >= 0.1 ? 'WEAK' : 'NONE';
@@ -1412,7 +1412,7 @@ const HitterPlusApp = () => {
                     borderRadius: 10, padding: '14px 16px'
                   }}>
                     <div style={{ fontSize: 10, color: '#64748b', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 4 }}>
-                      TROUT+ × xwOBA r
+                      HITTER+ × xwOBA r
                     </div>
                     <div style={{ fontSize: 22, fontWeight: 700, color: corrColor, fontFamily: "'Outfit', sans-serif" }}>
                       {r.toFixed(3)}
@@ -1427,9 +1427,9 @@ const HitterPlusApp = () => {
                   </div>
                 );
               })()}
-              {/* Hitter+ vs xwOBA correlation card */}
-              {hitterXwobaCorr !== null && (() => {
-                const r = hitterXwobaCorr;
+              {/* Trout+ vs xwOBA Pearson r */}
+              {troutXwobaCorr !== null && (() => {
+                const r = troutXwobaCorr;
                 const pct = Math.abs(r) * 100;
                 const corrColor = r >= 0.5 ? '#22c55e' : r >= 0.3 ? '#a3e635' : r >= 0.1 ? '#f59e0b' : '#ef4444';
                 const corrLabel = r >= 0.5 ? 'STRONG' : r >= 0.3 ? 'MODERATE' : r >= 0.1 ? 'WEAK' : 'NONE';
@@ -1439,7 +1439,7 @@ const HitterPlusApp = () => {
                     borderRadius: 10, padding: '14px 16px'
                   }}>
                     <div style={{ fontSize: 10, color: '#64748b', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 4 }}>
-                      HITTER+ × xwOBA r
+                      TROUT+ × xwOBA r
                     </div>
                     <div style={{ fontSize: 22, fontWeight: 700, color: corrColor, fontFamily: "'Outfit', sans-serif" }}>
                       {r.toFixed(3)}
